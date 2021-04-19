@@ -1,0 +1,10 @@
+[package]
+name = "eoss-fuse"
+version = "0.1.0"
+authors = ["lightsing <light.tsing@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+fuser = "0.7"
+bitmaps = "2.1"
+typenum = "1.11"
