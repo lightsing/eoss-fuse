@@ -9,6 +9,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
 
+    outputs:
+      run_job: ${{ steps.check_files.outputs.run_job }}
+
     steps:
       - uses: actions/checkout@v2
         with:
