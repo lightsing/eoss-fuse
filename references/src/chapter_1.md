@@ -44,3 +44,5 @@ A `FatBitMap` takes the last 2 blocks of a `SharedChunk`.
 ### MetaChunk
 
 `MetaChunk` is a chunk holds `Dir` metadata.
+
+## Collision
