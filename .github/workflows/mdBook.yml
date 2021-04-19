@@ -31,9 +31,9 @@ jobs:
             if [[ $file != references/* ]]; then
               echo "This modified file is not under the 'references' folder."
               echo "::set-output name=run_job::false"
-              break
             else
               echo "::set-output name=run_job::true"
+              break
             fi
           done < files.txt
           
@@ -45,6 +45,8 @@ jobs:
     if: needs.check.outputs.run_job == 'true'
     
     steps:
+      - uses: actions/checkout@v2
+
       - name: setup mdBook
         uses: peaceiris/actions-mdbook@v1.1.13
         with:

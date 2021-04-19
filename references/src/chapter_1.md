@@ -47,4 +47,4 @@ A `FatBitMap` takes the last 2 blocks of a `SharedChunk`.
 
 ## Collision
 
-`File` and `TinyFile`
+`File` and `TinyFile` are using
