@@ -50,23 +50,30 @@ impl Read for Chunk {
     }
 }
 
+impl <'a> ChunkWriter<'a> {
+    fn write(&mut self, buf: &[u8], acc: uszie) -> io::Result<uszie> {
+        let block_idx = self.ptr / BLOCK_SIZE;
+        let offset = self.ptr % BLOCK_SIZE;
+        debug_assert!(block_idx < BLOCK_PER_CHUNK);
+        debug_assert!(offset < BLOCK_SIZE);
+
+        let remaining = BLOCK_SIZE - offset;
+        let write_in = min(remaining, buf.len());
+        self.guards[block_idx][offset..offset + write_in].copy_from_slice(&buf[..write_in]);
+
+        self.ptr += write_in;
+
+        if buf.len() == write_in {
+            Ok(acc + write_in)
+        } else {
+            self.write(&buf[..write_in], acc + write_in)
+        }
+    }
+}
+
 impl <'a> Write for ChunkWriter<'a> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let len = buf.len();
-        let mut buf = buf;
-        while self.available > 0 {
-            let block_idx = self.ptr / BLOCK_SIZE;
-            let offset = self.ptr % BLOCK_SIZE;
-            debug_assert!(block_idx < BLOCK_PER_CHUNK);
-            debug_assert!(offset < BLOCK_SIZE);
-            let remaining = BLOCK_SIZE - offset;
-            let write_in = min(remaining, buf.len());
-            self.guards[block_idx][offset..offset + write_in].copy_from_slice(&buf[..write_in]);
-            buf = &buf[..write_in];
-            self.ptr += write_in;
-            self.available -= write_in;
-        }
-        Ok(len - buf.len())
+        self.write(buf, 0)
     }
 
     fn flush(&mut self) -> io::Result<()> {
