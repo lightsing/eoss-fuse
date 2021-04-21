@@ -7,6 +7,7 @@ use std::task::{Context, Poll, Waker};
 use std::pin::Pin;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
+use std::array;
 
 const CHUNK_SIZE: usize = BLOCK_SIZE * BLOCK_PER_CHUNK;
 const BLOCK_PER_CHUNK: usize = 1024;
@@ -66,23 +67,6 @@ impl Chunk {
         }
     }
 
-    /// Build a chunk from exists blocks without copy its content.
-    pub fn from_blocks(blocks: [Block; BLOCK_PER_CHUNK]) -> Self {
-        let data: Box<[RwLock<Block>]> = unsafe {
-            let blocks: [MaybeUninit<Block>; BLOCK_PER_CHUNK] = std::mem::transmute(blocks);
-            (0..BLOCK_PER_CHUNK)
-                .map(|i| {
-                    let block = std::ptr::read(&blocks[i]).assume_init();
-                    RwLock::new(block)
-                })
-                .collect()
-        };
-        Self {
-            data: data.try_into().unwrap(),
-            subscriber: Default::default()
-        }
-    }
-
     pub fn writer(&self) -> ChunkWriter {
         ChunkWriter::new(self)
     }
@@ -93,6 +77,30 @@ impl Chunk {
 
     fn subscribe(&self, waker: Waker) {
         self.subscriber.lock().push(waker)
+    }
+}
+
+/// Build a chunk from exists blocks without copy its content.
+impl From<[Block; BLOCK_PER_CHUNK]> for Chunk {
+    fn from(blocks: [Block; BLOCK_PER_CHUNK]) -> Self {
+        let data: Box<[RwLock<Block>]> =
+            array::IntoIter::new(blocks)
+                .map(RwLock::new)
+                .collect();
+        Self {
+            data: data.try_into().unwrap(),
+            subscriber: Default::default()
+        }
+    }
+}
+
+/// Build blocks from a existing chunk without copy its content.
+impl From<Chunk> for Box<[Block; BLOCK_PER_CHUNK]> {
+    fn from(chunk: Chunk) -> Self {
+        array::IntoIter::new(*chunk.data)
+            .map(|l| l.into_inner())
+            .collect::<Box<[Block]>>()
+            .try_into().unwrap()
     }
 }
 
