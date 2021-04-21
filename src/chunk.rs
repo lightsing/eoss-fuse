@@ -6,17 +6,39 @@ use tokio::io::{AsyncWrite, AsyncRead, ReadBuf};
 use std::task::{Context, Poll, Waker};
 use std::pin::Pin;
 use std::mem::MaybeUninit;
-
-pub type Block = [u8; BLOCK_SIZE];
+use std::ops::{Deref, DerefMut};
 
 const CHUNK_SIZE: usize = BLOCK_SIZE * BLOCK_PER_CHUNK;
 const BLOCK_PER_CHUNK: usize = 1024;
 /// Default block size of 4 KiB
 const BLOCK_SIZE: usize = 4096;
 
+#[derive(Clone, Debug)]
+pub struct Block(Box<[u8; BLOCK_SIZE]>);
+
+impl Default for Block {
+    fn default() -> Self {
+        Self(Box::new([0; BLOCK_SIZE]))
+    }
+}
+
+impl Deref for Block {
+    type Target = [u8; BLOCK_SIZE];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Block {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 /// Chunk is the minimum storage unit with size of 4MiB.
 pub struct Chunk {
-    data: [RwLock<Block>; BLOCK_PER_CHUNK],
+    data: Box<[RwLock<Block>; BLOCK_PER_CHUNK]>,
     subscriber: Mutex<Vec<Waker>>,
 }
 
@@ -36,16 +58,15 @@ pub struct ChunkReader<'a> {
 impl Chunk {
     /// Build a chunk with initialized blocks with zero.
     pub fn new() -> Self {
-        let data: Box<[RwLock<Block>]> = (0..BLOCK_PER_CHUNK).map(|_| RwLock::new([0; BLOCK_SIZE])).collect();
+        let data: Box<[RwLock<Block>]> = (0..BLOCK_PER_CHUNK).map(|_| RwLock::new(Block::default())).collect();
         let data: Box<[RwLock<Block>; BLOCK_PER_CHUNK]> = data.try_into().unwrap();
         Self {
-            data: *data,
+            data,
             subscriber: Default::default()
         }
     }
 
-    /// Build a chunk from exists blocks without copy it.
-    /// Safety: the ownership is transferred to `RwLock` which won't leak the array.
+    /// Build a chunk from exists blocks without copy its content.
     pub fn from_blocks(blocks: [Block; BLOCK_PER_CHUNK]) -> Self {
         let data: Box<[RwLock<Block>]> = unsafe {
             let blocks: [MaybeUninit<Block>; BLOCK_PER_CHUNK] = std::mem::transmute(blocks);
@@ -56,9 +77,8 @@ impl Chunk {
                 })
                 .collect()
         };
-        let data: Box<[RwLock<Block>; BLOCK_PER_CHUNK]> = data.try_into().unwrap();
         Self {
-            data: *data,
+            data: data.try_into().unwrap(),
             subscriber: Default::default()
         }
     }
