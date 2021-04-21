@@ -48,6 +48,10 @@ impl <'a> ChunkWriter<'a> {
     }
 
     fn write(&mut self, buf: &[u8], acc: uszie) -> io::Result<uszie> {
+        // EOF
+        if ptr == BLOCK_SIZE * BLOCK_PER_CHUNK {
+            return Ok(0)
+        }
         let block_idx = self.ptr / BLOCK_SIZE;
         let offset = self.ptr % BLOCK_SIZE;
         debug_assert!(block_idx < BLOCK_PER_CHUNK);
@@ -59,10 +63,11 @@ impl <'a> ChunkWriter<'a> {
 
         self.ptr += write_in;
 
+        // buf full
         if buf.len() == write_in {
             Ok(acc + write_in)
         } else {
-            self.write(&buf[..write_in], acc + write_in)
+            self.write(&buf[write_in..], acc + write_in)
         }
     }
 }
