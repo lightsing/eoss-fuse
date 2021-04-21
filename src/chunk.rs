@@ -263,3 +263,24 @@ impl<'a> AsyncRead for ChunkReader<'a> {
 
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Chunk, BLOCK_SIZE, BLOCK_PER_CHUNK};
+    use std::io::Write;
+
+    #[test]
+    fn test_write() {
+        let chunk = Chunk::new();
+        let mut chunk_writer = chunk.writer();
+        for i in 0..BLOCK_PER_CHUNK / 4 {
+            chunk_writer.write_all(&[i as u8; 4096 * 4]).unwrap();
+        }
+        drop(chunk_writer);
+        for i in 0..BLOCK_PER_CHUNK {
+            for j in 0..BLOCK_SIZE {
+                assert_eq!(chunk.data[i].read()[j], (i / 4) as u8)
+            }
+        }
+    }
+}
