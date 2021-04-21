@@ -1,12 +1,7 @@
-use fuser::{Filesystem, Request};
-use bitmaps::Bitmap;
-use typenum::U1024;
-use crate::provider::ChunkProvider;
-use std::io::{self, Read, Write};
-use parking_lot::{RwLock, RwLockWriteGuard, RawRwLock};
+use parking_lot::{RwLock, RwLockWriteGuard};
+use std::cmp::min;
 use std::convert::TryInto;
-use std::cmp::{max, min};
-use parking_lot::lock_api::RwLockReadGuard;
+use std::io::{self, Read, Write};
 
 pub const ID_LENGTH: usize = 64;
 const CHUNK_SIZE: usize = BLOCK_SIZE * BLOCK_PER_CHUNK;
@@ -22,7 +17,7 @@ pub struct Chunk {
 
 pub struct ChunkWriter<'a> {
     guards: [RwLockWriteGuard<'a, Block>; BLOCK_PER_CHUNK],
-    ptr: usize
+    ptr: usize,
 }
 
 pub struct ChunkReader<'a> {
@@ -35,23 +30,27 @@ impl Chunk {
         ChunkWriter::new(self)
     }
 
-    pub fn read(&self) -> ChunkReader { ChunkReader::new(self) }
+    pub fn read(&self) -> ChunkReader {
+        ChunkReader::new(self)
+    }
 }
 
-impl <'a> ChunkWriter<'a> {
+impl<'a> ChunkWriter<'a> {
     pub fn new(chunk: &'a Chunk) -> Self {
-        let guards: Box<[RwLockWriteGuard<'a, Block>]> = chunk.data.iter().map(|b| b.write()).collect();
-        let guards: Box<[RwLockWriteGuard<'a, Block>; BLOCK_PER_CHUNK]> = guards.try_into().unwrap();
+        let guards: Box<[RwLockWriteGuard<'a, Block>]> =
+            chunk.data.iter().map(|b| b.write()).collect();
+        let guards: Box<[RwLockWriteGuard<'a, Block>; BLOCK_PER_CHUNK]> =
+            guards.try_into().unwrap();
         Self {
             guards: *guards,
-            ptr: 0
+            ptr: 0,
         }
     }
 
     fn write(&mut self, buf: &[u8], acc: usize) -> io::Result<usize> {
         // EOF
         if self.ptr == BLOCK_SIZE * BLOCK_PER_CHUNK {
-            return Ok(0)
+            return Ok(0);
         }
         let block_idx = self.ptr / BLOCK_SIZE;
         let offset = self.ptr % BLOCK_SIZE;
@@ -84,7 +83,7 @@ impl<'a> ChunkReader<'a> {
     fn read(&mut self, buf: &mut [u8], acc: usize) -> io::Result<usize> {
         // EOF
         if self.ptr == BLOCK_SIZE * BLOCK_PER_CHUNK {
-            return Ok(acc)
+            return Ok(acc);
         }
         let block_idx = self.ptr / BLOCK_SIZE;
         let offset = self.ptr % BLOCK_SIZE;
@@ -97,7 +96,7 @@ impl<'a> ChunkReader<'a> {
         } else {
             match self.chunk[block_idx].try_read_recursive() {
                 None => return Ok(acc),
-                Some(guard) => guard
+                Some(guard) => guard,
             }
         };
 
@@ -108,7 +107,7 @@ impl<'a> ChunkReader<'a> {
         self.ptr += read_in;
 
         // buf full
-        return if buf.len() == read_in {
+        if buf.len() == read_in {
             Ok(acc + read_in)
         } else {
             self.read(&mut buf[read_in..], acc + read_in)
@@ -116,7 +115,7 @@ impl<'a> ChunkReader<'a> {
     }
 }
 
-impl <'a> Write for ChunkWriter<'a> {
+impl<'a> Write for ChunkWriter<'a> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.write(buf, 0)
     }
@@ -126,12 +125,11 @@ impl <'a> Write for ChunkWriter<'a> {
     }
 }
 
-impl <'a> Read for ChunkReader<'a> {
+impl<'a> Read for ChunkReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.read(buf, 0)
     }
 }
-
 
 pub struct RawChunk;
 pub struct MetaChunk;
@@ -145,7 +143,7 @@ enum ChunkType {
     /// Chunk holds tiny files
     TinyFiles,
     /// If a provider does not known the type, leave it as Unknown
-    Unknown
+    Unknown,
 }
 
 impl Chunk {
