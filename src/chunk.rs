@@ -5,6 +5,7 @@ use parking_lot::{RwLock, RwLockWriteGuard, Mutex};
 use tokio::io::{AsyncWrite, AsyncRead, ReadBuf};
 use std::task::{Context, Poll, Waker};
 use std::pin::Pin;
+use std::mem::MaybeUninit;
 
 pub type Block = [u8; BLOCK_SIZE];
 
@@ -33,6 +34,35 @@ pub struct ChunkReader<'a> {
 }
 
 impl Chunk {
+    /// Build a chunk with initialized blocks with zero.
+    pub fn new() -> Self {
+        let data: Box<[RwLock<Block>]> = (0..BLOCK_PER_CHUNK).map(|_| RwLock::new([0; BLOCK_SIZE])).collect();
+        let data: Box<[RwLock<Block>; BLOCK_PER_CHUNK]> = data.try_into().unwrap();
+        Self {
+            data: *data,
+            subscriber: Default::default()
+        }
+    }
+
+    /// Build a chunk from exists blocks without copy it.
+    /// Safety: the ownership is transferred to `RwLock` which won't leak the array.
+    pub fn from_blocks(blocks: [Block; BLOCK_PER_CHUNK]) -> Self {
+        let data: Box<[RwLock<Block>]> = unsafe {
+            let blocks: [MaybeUninit<Block>; BLOCK_PER_CHUNK] = std::mem::transmute(blocks);
+            (0..BLOCK_PER_CHUNK)
+                .map(|i| {
+                    let block = std::ptr::read(&blocks[i]).assume_init();
+                    RwLock::new(block)
+                })
+                .collect()
+        };
+        let data: Box<[RwLock<Block>; BLOCK_PER_CHUNK]> = data.try_into().unwrap();
+        Self {
+            data: *data,
+            subscriber: Default::default()
+        }
+    }
+
     pub fn writer(&self) -> ChunkWriter {
         ChunkWriter::new(self)
     }
