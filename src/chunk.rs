@@ -1,7 +1,9 @@
+use std::cell::Cell;
 use std::cmp::min;
-use std::convert::TryInto;
+use std::convert::{TryInto, Infallible};
 use std::io::{self, Read, Write};
 use parking_lot::{RwLock, RwLockWriteGuard};
+use std::borrow::Borrow;
 
 pub type Block = [u8; BLOCK_SIZE];
 
@@ -16,7 +18,7 @@ pub struct Chunk {
 }
 
 pub struct ChunkWriter<'a> {
-    guards: [RwLockWriteGuard<'a, Block>; BLOCK_PER_CHUNK],
+    guards: [Option<RwLockWriteGuard<'a, Block>>; BLOCK_PER_CHUNK],
     ptr: usize,
 }
 
@@ -37,9 +39,9 @@ impl Chunk {
 
 impl<'a> ChunkWriter<'a> {
     pub fn new(chunk: &'a Chunk) -> Self {
-        let guards: Box<[RwLockWriteGuard<'a, Block>]> =
-            chunk.data.iter().map(|b| b.write()).collect();
-        let guards: Box<[RwLockWriteGuard<'a, Block>; BLOCK_PER_CHUNK]> =
+        let guards: Box<[Option<RwLockWriteGuard<'a, Block>>]> =
+            chunk.data.iter().map(|b| Some(b.write())).collect();
+        let guards: Box<[Option<RwLockWriteGuard<'a, Block>>; BLOCK_PER_CHUNK]> =
             guards.try_into().unwrap();
         Self {
             guards: *guards,
@@ -59,9 +61,14 @@ impl<'a> ChunkWriter<'a> {
 
         let remaining = BLOCK_SIZE - offset;
         let write_in = min(remaining, buf.len());
-        self.guards[block_idx][offset..offset + write_in].copy_from_slice(&buf[..write_in]);
+        let mut guard = self.guards[block_idx].as_deref_mut().unwrap();
+        guard[offset..offset + write_in].copy_from_slice(&buf[..write_in]);
 
         self.ptr += write_in;
+        // drop used guard
+        if self.ptr / BLOCK_SIZE != block_idx {
+            self.guards[block_idx] = None;
+        }
 
         // buf full
         if buf.len() == write_in {
