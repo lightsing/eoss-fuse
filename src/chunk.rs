@@ -19,12 +19,14 @@ pub struct Chunk {
     subscriber: Mutex<Vec<Waker>>,
 }
 
+/// A Writer for `Chunk`
 pub struct ChunkWriter<'a> {
     chunk: &'a Chunk,
     guards: [Option<RwLockWriteGuard<'a, Block>>; BLOCK_PER_CHUNK],
     ptr: usize,
 }
 
+/// A Reader for `Chunk`
 pub struct ChunkReader<'a> {
     chunk: &'a Chunk,
     ptr: usize,
@@ -98,6 +100,7 @@ impl<'a> ChunkReader<'a> {
         }
     }
 
+    /// Read the chunk, will block if there is no data available
     fn read(&mut self, buf: &mut [u8], acc: usize) -> io::Result<usize> {
         let n = self.try_read(buf, acc)?;
         // not EOF, data currently not available
@@ -117,6 +120,7 @@ impl<'a> ChunkReader<'a> {
         }
     }
 
+    /// Try to read the chunk, will return Ok(0) if no data is available
     fn try_read(&mut self, buf: &mut [u8], acc: usize) -> io::Result<usize> {
         // EOF
         if self.ptr == CHUNK_SIZE {
