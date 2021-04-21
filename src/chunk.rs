@@ -1,9 +1,7 @@
-use std::cell::Cell;
 use std::cmp::min;
-use std::convert::{TryInto, Infallible};
+use std::convert::TryInto;
 use std::io::{self, Read, Write};
 use parking_lot::{RwLock, RwLockWriteGuard};
-use std::borrow::Borrow;
 
 pub type Block = [u8; BLOCK_SIZE];
 
@@ -61,7 +59,7 @@ impl<'a> ChunkWriter<'a> {
 
         let remaining = BLOCK_SIZE - offset;
         let write_in = min(remaining, buf.len());
-        let mut guard = self.guards[block_idx].as_deref_mut().unwrap();
+        let guard = self.guards[block_idx].as_deref_mut().unwrap();
         guard[offset..offset + write_in].copy_from_slice(&buf[..write_in]);
 
         self.ptr += write_in;
