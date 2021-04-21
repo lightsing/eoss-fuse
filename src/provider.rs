@@ -1,9 +1,12 @@
-use crate::fs::{Chunk, ID_LENGTH};
+use crate::chunk::Chunk;
+use crate::fs::ID_LENGTH;
 
 #[derive(Debug)]
 pub enum ChunkProviderError {}
 
 pub trait ChunkProvider {
+    /// Initialize the provider with a config
+    //fn init(&self, config: Config) -> Result<(), ChunkProviderError>;
     /// Request a chunk from the provider with chunk id
     fn get_chunk_by_id(&self, id: &[u8; ID_LENGTH]) -> Option<Chunk>;
     /// Request a list of chunks from the provider with chunk id
