@@ -3,9 +3,10 @@ use bitmaps::Bitmap;
 use typenum::U1024;
 use crate::provider::ChunkProvider;
 use std::io::{self, Read, Write};
-use parking_lot::{RwLock, RwLockWriteGuard};
+use parking_lot::{RwLock, RwLockWriteGuard, RawRwLock};
 use std::convert::TryInto;
 use std::cmp::{max, min};
+use parking_lot::lock_api::RwLockReadGuard;
 
 pub const ID_LENGTH: usize = 64;
 const CHUNK_SIZE: usize = BLOCK_SIZE * BLOCK_PER_CHUNK;
@@ -47,9 +48,9 @@ impl <'a> ChunkWriter<'a> {
         }
     }
 
-    fn write(&mut self, buf: &[u8], acc: uszie) -> io::Result<uszie> {
+    fn write(&mut self, buf: &[u8], acc: usize) -> io::Result<usize> {
         // EOF
-        if ptr == BLOCK_SIZE * BLOCK_PER_CHUNK {
+        if self.ptr == BLOCK_SIZE * BLOCK_PER_CHUNK {
             return Ok(0)
         }
         let block_idx = self.ptr / BLOCK_SIZE;
@@ -82,7 +83,7 @@ impl<'a> ChunkReader<'a> {
 
     fn read(&mut self, buf: &mut [u8], acc: usize) -> io::Result<usize> {
         // EOF
-        if ptr == BLOCK_SIZE * BLOCK_PER_CHUNK {
+        if self.ptr == BLOCK_SIZE * BLOCK_PER_CHUNK {
             return Ok(acc)
         }
         let block_idx = self.ptr / BLOCK_SIZE;
@@ -107,13 +108,11 @@ impl<'a> ChunkReader<'a> {
         self.ptr += read_in;
 
         // buf full
-        if buf.len() == read_in {
+        return if buf.len() == read_in {
             Ok(acc + read_in)
         } else {
             self.read(&mut buf[read_in..], acc + read_in)
         }
-
-        Ok(0)
     }
 }
 
