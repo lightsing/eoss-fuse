@@ -27,9 +27,7 @@ pub struct ChunkWriter<'a> {
 pub struct ChunkReader<'a> {
     chunk: &'a [RwLock<Block>; BLOCK_PER_CHUNK],
     ptr: usize,
-    available: usize,
 }
-
 
 impl Chunk {
     pub fn writer(&self) -> ChunkWriter {
@@ -48,25 +46,7 @@ impl <'a> ChunkWriter<'a> {
             ptr: 0
         }
     }
-}
 
-impl<'a> ChunkReader<'a> {
-    pub fn new(chunk: &'a Chunk) -> Self {
-        Self {
-            chunk: &chunk.data,
-            ptr: 0,
-            available: BLOCK_PER_CHUNK * BLOCK_SIZE
-        }
-    }
-}
-
-impl Read for Chunk {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        todo!()
-    }
-}
-
-impl <'a> ChunkWriter<'a> {
     fn write(&mut self, buf: &[u8], acc: uszie) -> io::Result<uszie> {
         let block_idx = self.ptr / BLOCK_SIZE;
         let offset = self.ptr % BLOCK_SIZE;
@@ -83,6 +63,15 @@ impl <'a> ChunkWriter<'a> {
             Ok(acc + write_in)
         } else {
             self.write(&buf[..write_in], acc + write_in)
+        }
+    }
+}
+
+impl<'a> ChunkReader<'a> {
+    pub fn new(chunk: &'a Chunk) -> Self {
+        Self {
+            chunk: &chunk.data,
+            ptr: 0,
         }
     }
 }
