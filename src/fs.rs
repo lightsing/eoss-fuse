@@ -21,6 +21,11 @@ pub struct Chunk {
 
 pub struct ChunkWriter<'a> {
     guards: [RwLockWriteGuard<'a, Block>; BLOCK_PER_CHUNK],
+    ptr: usize
+}
+
+pub struct ChunkReader<'a> {
+    chunk: &'a [RwLock<Block>; BLOCK_PER_CHUNK],
     ptr: usize,
     available: usize,
 }
@@ -30,6 +35,8 @@ impl Chunk {
     pub fn writer(&self) -> ChunkWriter {
         ChunkWriter::new(self)
     }
+
+    pub fn read(&self) -> ChunkReader { ChunkReader::new(self) }
 }
 
 impl <'a> ChunkWriter<'a> {
@@ -38,6 +45,15 @@ impl <'a> ChunkWriter<'a> {
         let guards: Box<[RwLockWriteGuard<'a, Block>; BLOCK_PER_CHUNK]> = guards.try_into().unwrap();
         Self {
             guards: *guards,
+            ptr: 0
+        }
+    }
+}
+
+impl<'a> ChunkReader<'a> {
+    pub fn new(chunk: &'a Chunk) -> Self {
+        Self {
+            chunk: &chunk.data,
             ptr: 0,
             available: BLOCK_PER_CHUNK * BLOCK_SIZE
         }
