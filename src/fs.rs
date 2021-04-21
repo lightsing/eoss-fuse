@@ -74,6 +74,42 @@ impl<'a> ChunkReader<'a> {
             ptr: 0,
         }
     }
+
+    fn read(&mut self, buf: &mut [u8], acc: usize) -> io::Result<usize> {
+        // EOF
+        if ptr == BLOCK_SIZE * BLOCK_PER_CHUNK {
+            return Ok(acc)
+        }
+        let block_idx = self.ptr / BLOCK_SIZE;
+        let offset = self.ptr % BLOCK_SIZE;
+        debug_assert!(block_idx < BLOCK_PER_CHUNK);
+        debug_assert!(offset < BLOCK_SIZE);
+
+        // ensure first
+        let guard = if acc == 0 {
+            self.chunk[block_idx].read_recursive()
+        } else {
+            match self.chunk[block_idx].try_read_recursive() {
+                None => return Ok(acc),
+                Some(guard) => guard
+            }
+        };
+
+        let remaining = BLOCK_SIZE - offset;
+        let read_in = min(remaining, buf.len());
+        buf[..read_in].copy_from_slice(&guard[offset..offset + read_in]);
+
+        self.ptr += read_in;
+
+        // buf full
+        if buf.len() == read_in {
+            Ok(acc + read_in)
+        } else {
+            self.read(&mut buf[read_in..], acc + read_in)
+        }
+
+        Ok(0)
+    }
 }
 
 impl <'a> Write for ChunkWriter<'a> {
@@ -83,6 +119,12 @@ impl <'a> Write for ChunkWriter<'a> {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+impl <'a> Read for ChunkReader<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.read(buf, 0)
     }
 }
 
