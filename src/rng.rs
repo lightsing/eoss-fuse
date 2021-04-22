@@ -2,7 +2,6 @@ use crossbeam::queue::ArrayQueue;
 use once_cell::sync::Lazy;
 use rand::rngs::StdRng;
 use rand::{thread_rng, SeedableRng};
-use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 
 static RNG_POOL: Lazy<ArrayQueue<StdRng>> = Lazy::new(|| ArrayQueue::new(10));
