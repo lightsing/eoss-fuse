@@ -1,5 +1,4 @@
-
-pub const ID_LENGTH: usize = 64;
+use crate::id::ID_LENGTH;
 
 pub struct RawChunk;
 pub struct MetaChunk;

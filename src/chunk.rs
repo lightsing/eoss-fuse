@@ -7,7 +7,7 @@ use std::task::{Context, Poll, Waker};
 use std::pin::Pin;
 use std::ops::{Deref, DerefMut};
 use std::array;
-use crate::fs::ID_LENGTH;
+use crate::id::Id;
 
 const CHUNK_SIZE: usize = BLOCK_SIZE * BLOCK_PER_CHUNK;
 const BLOCK_PER_CHUNK: usize = 1024;
@@ -39,7 +39,7 @@ impl DerefMut for Block {
 
 /// Chunk is the minimum storage unit with size of 4MiB.
 pub struct Chunk {
-    id: [u8; ID_LENGTH],
+    id: Id,
     data: Box<[RwLock<Block>; BLOCK_PER_CHUNK]>,
     subscriber: Mutex<Vec<Waker>>,
 }
@@ -59,7 +59,7 @@ pub struct ChunkReader<'a> {
 
 impl Chunk {
     /// Build a chunk with initialized blocks with zero.
-    pub fn new(id: [u8; ID_LENGTH]) -> Self {
+    pub fn new(id: Id) -> Self {
         let data: Box<[RwLock<Block>]> = (0..BLOCK_PER_CHUNK).map(|_| RwLock::new(Block::default())).collect();
         let data: Box<[RwLock<Block>; BLOCK_PER_CHUNK]> = data.try_into().unwrap();
         Self {
@@ -70,7 +70,7 @@ impl Chunk {
     }
 
     /// Build a chunk from exists blocks without copy its content.
-    pub fn new_with_blocks(id: [u8; ID_LENGTH], blocks: [Block; BLOCK_PER_CHUNK]) -> Self {
+    pub fn new_with_blocks(id: Id, blocks: [Block; BLOCK_PER_CHUNK]) -> Self {
         let data: Box<[RwLock<Block>]> =
             array::IntoIter::new(blocks)
                 .map(RwLock::new)
@@ -299,10 +299,11 @@ impl<'a> AsyncSeek for ChunkReader<'a> {
 mod tests {
     use super::{Chunk, BLOCK_SIZE, BLOCK_PER_CHUNK};
     use std::io::Write;
+    use crate::id::Id;
 
     #[test]
     fn test_write() {
-        let chunk = Chunk::new();
+        let chunk = Chunk::new(Id::new_random());
         let mut chunk_writer = chunk.writer();
         for i in 0..BLOCK_PER_CHUNK / 4 {
             chunk_writer.write_all(&[i as u8; 4096 * 4]).unwrap();
