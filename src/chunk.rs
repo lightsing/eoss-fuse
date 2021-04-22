@@ -7,6 +7,7 @@ use std::task::{Context, Poll, Waker};
 use std::pin::Pin;
 use std::ops::{Deref, DerefMut};
 use std::array;
+use crate::fs::ID_LENGTH;
 
 const CHUNK_SIZE: usize = BLOCK_SIZE * BLOCK_PER_CHUNK;
 const BLOCK_PER_CHUNK: usize = 1024;
@@ -38,6 +39,7 @@ impl DerefMut for Block {
 
 /// Chunk is the minimum storage unit with size of 4MiB.
 pub struct Chunk {
+    id: [u8; ID_LENGTH],
     data: Box<[RwLock<Block>; BLOCK_PER_CHUNK]>,
     subscriber: Mutex<Vec<Waker>>,
 }
@@ -57,11 +59,25 @@ pub struct ChunkReader<'a> {
 
 impl Chunk {
     /// Build a chunk with initialized blocks with zero.
-    pub fn new() -> Self {
+    pub fn new(id: [u8; ID_LENGTH]) -> Self {
         let data: Box<[RwLock<Block>]> = (0..BLOCK_PER_CHUNK).map(|_| RwLock::new(Block::default())).collect();
         let data: Box<[RwLock<Block>; BLOCK_PER_CHUNK]> = data.try_into().unwrap();
         Self {
+            id,
             data,
+            subscriber: Default::default()
+        }
+    }
+
+    /// Build a chunk from exists blocks without copy its content.
+    pub fn new_with_blocks(id: [u8; ID_LENGTH], blocks: [Block; BLOCK_PER_CHUNK]) -> Self {
+        let data: Box<[RwLock<Block>]> =
+            array::IntoIter::new(blocks)
+                .map(RwLock::new)
+                .collect();
+        Self {
+            id,
+            data: data.try_into().unwrap(),
             subscriber: Default::default()
         }
     }
@@ -76,26 +92,6 @@ impl Chunk {
 
     fn subscribe(&self, waker: Waker) {
         self.subscriber.lock().push(waker)
-    }
-}
-
-impl Default for Chunk {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Build a chunk from exists blocks without copy its content.
-impl From<[Block; BLOCK_PER_CHUNK]> for Chunk {
-    fn from(blocks: [Block; BLOCK_PER_CHUNK]) -> Self {
-        let data: Box<[RwLock<Block>]> =
-            array::IntoIter::new(blocks)
-                .map(RwLock::new)
-                .collect();
-        Self {
-            data: data.try_into().unwrap(),
-            subscriber: Default::default()
-        }
     }
 }
 
