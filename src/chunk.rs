@@ -1,11 +1,10 @@
 use std::cmp::min;
 use std::convert::TryInto;
-use std::io::{self, Read, Write, Error};
+use std::io::{self, Read, Write, Seek, SeekFrom};
 use parking_lot::{RwLock, RwLockWriteGuard, Mutex};
-use tokio::io::{AsyncWrite, AsyncRead, ReadBuf};
+use tokio::io::{AsyncWrite, AsyncRead, ReadBuf, AsyncSeek};
 use std::task::{Context, Poll, Waker};
 use std::pin::Pin;
-use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::array;
 
@@ -77,6 +76,12 @@ impl Chunk {
 
     fn subscribe(&self, waker: Waker) {
         self.subscriber.lock().push(waker)
+    }
+}
+
+impl Default for Chunk {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -225,6 +230,25 @@ impl<'a> Read for ChunkReader<'a> {
     }
 }
 
+impl<'a> Seek for ChunkReader<'a> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        let target = match pos {
+            SeekFrom::Start(offset) => offset as i64,
+            SeekFrom::End(offset) => CHUNK_SIZE as i64 + offset,
+            SeekFrom::Current(offset) => self.ptr as i64 + offset
+        };
+        if target < 0 {
+            Err(io::Error::from(io::ErrorKind::InvalidInput))
+        } else if target as usize >= CHUNK_SIZE {
+            self.ptr = CHUNK_SIZE - 1;
+            Ok((CHUNK_SIZE - 1) as u64)
+        } else {
+            self.ptr = target as usize;
+            Ok(target as u64)
+        }
+    }
+}
+
 impl<'a> AsyncWrite for ChunkWriter<'a> {
     fn poll_write(self: Pin<&mut Self>, _: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         Poll::Ready(self.get_mut().write(buf, 0))
@@ -261,6 +285,17 @@ impl<'a> AsyncRead for ChunkReader<'a> {
             Err(e) => Poll::Ready(Err(e))
         }
 
+    }
+}
+
+impl<'a> AsyncSeek for ChunkReader<'a> {
+    fn start_seek(self: Pin<&mut Self>, position: SeekFrom) -> io::Result<()> {
+        self.get_mut().seek(position)?;
+        Ok(())
+    }
+
+    fn poll_complete(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<u64>> {
+        Poll::Ready(Ok(self.ptr as u64))
     }
 }
 
