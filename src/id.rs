@@ -6,9 +6,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
-use rand::RngCore;
-
-use crate::rng::Rng;
+use rand::{RngCore, thread_rng};
 
 pub const ID_LENGTH: usize = 32;
 
@@ -29,7 +27,7 @@ impl Id {
 
     pub fn new_random() -> Self {
         let mut id = [0u8; ID_LENGTH];
-        Rng::new().fill_bytes(&mut id);
+        thread_rng().fill_bytes(&mut id);
         Self::new(id)
     }
 
