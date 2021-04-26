@@ -45,6 +45,9 @@
         
 
         
+        <!-- MathJax -->
+        <script async type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        
     </head>
     <body>
         <!-- Provide site root to javascript -->
@@ -191,7 +194,22 @@ A <code>FatBitMap</code> takes the last 2 blocks of a <code>SharedChunk</code>.<
 <h3 id="metachunk"><a class="header" href="#metachunk">MetaChunk</a></h3>
 <p><code>MetaChunk</code> is a chunk holds <code>Dir</code> metadata.</p>
 <h2 id="collision"><a class="header" href="#collision">Collision</a></h2>
-<p><code>File</code> and <code>TinyFile</code> are using</p>
+<p><code>File</code> and <code>TinyFile</code> are using <code>32 Bytes</code> as ID.
+With this formula:
+\( 1 - e^{-\frac{N^2}{2^{b+1}}} \), b represents the bits, N represents the file count.</p>
+<p>From this formula, the collision probability is:</p>
+<table><thead><tr><th align="center">N</th><th align="center">Probability</th></tr></thead><tbody>
+<tr><td align="center">\( 10^{31} \)</td><td align="center">\( 4.44 * 10^{-16} \)</td></tr>
+<tr><td align="center">\( 10^{32} \)</td><td align="center">\( 4.32 * 10^{-14} \)</td></tr>
+<tr><td align="center">\( 10^{33} \)</td><td align="center">\( 4.32 * 10^{-12} \)</td></tr>
+<tr><td align="center">\( 10^{34} \)</td><td align="center">\( 4.32 * 10^{-10} \)</td></tr>
+<tr><td align="center">\( 10^{35} \)</td><td align="center">\( 4.32 * 10^{-8}  \)</td></tr>
+<tr><td align="center">\( 10^{36} \)</td><td align="center">\( 4.32 * 10^{-6}  \)</td></tr>
+<tr><td align="center">\( 10^{37} \)</td><td align="center">\( 4.32 * 10^{-4}  \)</td></tr>
+<tr><td align="center">\( 10^{38} \)</td><td align="center">\(     0.04226     \)</td></tr>
+<tr><td align="center">\( 10^{39} \)</td><td align="center">\(     0.98667     \)</td></tr>
+</tbody></table>
+<p>It's safe to store \( 10^{30} \) files in an EOSS Filesystem.</p>
 
                     </main>
 
