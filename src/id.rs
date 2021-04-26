@@ -35,6 +35,11 @@ impl Id {
         self.hex
             .get_or_init(|| hex::encode(&*self.inner).into_boxed_str())
     }
+
+    pub fn derive_n(&self, n: usize) -> [u8; ID_LENGTH] {
+        let hash = blake3::keyed_hash(self.inner.deref(), n.to_le_bytes().as_ref());
+        *hash.as_bytes()
+    }
 }
 
 impl Deref for Id {
