@@ -1,18 +1,32 @@
-use std::cmp::min;
-use std::convert::TryInto;
-use std::io::{self, Read, Write, Seek, SeekFrom};
-use parking_lot::{RwLock, RwLockWriteGuard, Mutex};
-use tokio::io::{AsyncWrite, AsyncRead, ReadBuf, AsyncSeek};
-use std::task::{Context, Poll, Waker};
-use std::pin::Pin;
-use std::ops::{Deref, DerefMut};
-use std::array;
 use crate::id::Id;
+use parking_lot::{Mutex, RwLock, RwLockWriteGuard};
+use std::array;
+use std::cmp::min;
+use std::convert::{TryFrom, TryInto};
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::ops::{Deref, DerefMut};
+use std::pin::Pin;
+use std::task::{Context, Poll, Waker};
+use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite, ReadBuf};
 
-const CHUNK_SIZE: usize = BLOCK_SIZE * BLOCK_PER_CHUNK;
-const BLOCK_PER_CHUNK: usize = 1024;
+pub const CHUNK_SIZE: usize = BLOCK_SIZE * BLOCK_PER_CHUNK;
+pub const BLOCK_PER_CHUNK: usize = 1024;
 /// Default block size of 4 KiB
-const BLOCK_SIZE: usize = 4096;
+pub const BLOCK_SIZE: usize = 4096;
+
+#[derive(thiserror::Error, Debug)]
+pub enum ChunkError {
+    #[error("invalid length {0}")]
+    InvalidLength(usize),
+    #[error(transparent)]
+    BlockError(#[from] BlockError),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum BlockError {
+    #[error("invalid length {0}")]
+    InvalidLength(usize),
+}
 
 #[derive(Clone, Debug)]
 pub struct Block(Box<[u8; BLOCK_SIZE]>);
@@ -34,6 +48,18 @@ impl Deref for Block {
 impl DerefMut for Block {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl TryFrom<&[u8]> for Block {
+    type Error = BlockError;
+
+    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
+        let data = data.to_owned().into_boxed_slice();
+        let data: Box<[u8; BLOCK_SIZE]> = data
+            .try_into()
+            .map_err(|b: Box<[u8]>| BlockError::InvalidLength(b.len()))?;
+        Ok(Self(data))
     }
 }
 
@@ -60,26 +86,45 @@ pub struct ChunkReader<'a> {
 impl Chunk {
     /// Build a chunk with initialized blocks with zero.
     pub fn new(id: Id) -> Self {
-        let data: Box<[RwLock<Block>]> = (0..BLOCK_PER_CHUNK).map(|_| RwLock::new(Block::default())).collect();
+        let data: Box<[RwLock<Block>]> = (0..BLOCK_PER_CHUNK)
+            .map(|_| RwLock::new(Block::default()))
+            .collect();
         let data: Box<[RwLock<Block>; BLOCK_PER_CHUNK]> = data.try_into().unwrap();
         Self {
             id,
             data,
-            subscriber: Default::default()
+            subscriber: Default::default(),
         }
     }
 
     /// Build a chunk from exists blocks without copy its content.
     pub fn new_with_blocks(id: Id, blocks: [Block; BLOCK_PER_CHUNK]) -> Self {
-        let data: Box<[RwLock<Block>]> =
-            array::IntoIter::new(blocks)
-                .map(RwLock::new)
-                .collect();
+        let data: Box<[RwLock<Block>]> = array::IntoIter::new(blocks).map(RwLock::new).collect();
         Self {
             id,
             data: data.try_into().unwrap(),
-            subscriber: Default::default()
+            subscriber: Default::default(),
         }
+    }
+
+    pub fn new_with_data(id: Id, blocks: Vec<u8>) -> Result<Self, ChunkError> {
+        if blocks.len() != CHUNK_SIZE {
+            return Err(ChunkError::InvalidLength(blocks.len()));
+        }
+        let blocks: Result<Vec<Block>, BlockError> = blocks
+            .chunks_exact(CHUNK_SIZE)
+            .map(Block::try_from)
+            .collect();
+        let blocks: Box<[RwLock<Block>]> = blocks?.into_iter().map(RwLock::new).collect();
+        Ok(Self {
+            id,
+            data: blocks.try_into().unwrap(),
+            subscriber: Default::default(),
+        })
+    }
+
+    pub fn id(&self) -> &Id {
+        &self.id
     }
 
     pub fn writer(&self) -> ChunkWriter {
@@ -101,7 +146,8 @@ impl From<Chunk> for Box<[Block; BLOCK_PER_CHUNK]> {
         array::IntoIter::new(*chunk.data)
             .map(|l| l.into_inner())
             .collect::<Box<[Block]>>()
-            .try_into().unwrap()
+            .try_into()
+            .unwrap()
     }
 }
 
@@ -153,10 +199,7 @@ impl<'a> ChunkWriter<'a> {
 
 impl<'a> ChunkReader<'a> {
     pub fn new(chunk: &'a Chunk) -> Self {
-        Self {
-            chunk,
-            ptr: 0,
-        }
+        Self { chunk, ptr: 0 }
     }
 
     /// Read the chunk, will block if there is no data available
@@ -231,7 +274,7 @@ impl<'a> Seek for ChunkReader<'a> {
         let target = match pos {
             SeekFrom::Start(offset) => offset as i64,
             SeekFrom::End(offset) => CHUNK_SIZE as i64 + offset,
-            SeekFrom::Current(offset) => self.ptr as i64 + offset
+            SeekFrom::Current(offset) => self.ptr as i64 + offset,
         };
         if target < 0 {
             Err(io::Error::from(io::ErrorKind::InvalidInput))
@@ -246,7 +289,11 @@ impl<'a> Seek for ChunkReader<'a> {
 }
 
 impl<'a> AsyncWrite for ChunkWriter<'a> {
-    fn poll_write(self: Pin<&mut Self>, _: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
         Poll::Ready(self.get_mut().write(buf, 0))
     }
 
@@ -256,7 +303,8 @@ impl<'a> AsyncWrite for ChunkWriter<'a> {
 
     fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
         let writer = self.get_mut();
-        writer.guards
+        writer
+            .guards
             .iter_mut()
             .filter(|block| block.is_some())
             .for_each(|block| *block = None);
@@ -266,7 +314,11 @@ impl<'a> AsyncWrite for ChunkWriter<'a> {
 }
 
 impl<'a> AsyncRead for ChunkReader<'a> {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
         let reader = self.get_mut();
         // currently we cannot incrementally initialize `ReadBuf`
         match reader.try_read(buf.initialize_unfilled(), 0) {
@@ -278,9 +330,8 @@ impl<'a> AsyncRead for ChunkReader<'a> {
                 buf.set_filled(buf.filled().len() + n);
                 Poll::Ready(Ok(()))
             }
-            Err(e) => Poll::Ready(Err(e))
+            Err(e) => Poll::Ready(Err(e)),
         }
-
     }
 }
 
@@ -297,9 +348,9 @@ impl<'a> AsyncSeek for ChunkReader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Chunk, BLOCK_SIZE, BLOCK_PER_CHUNK};
-    use std::io::Write;
+    use super::{Chunk, BLOCK_PER_CHUNK, BLOCK_SIZE};
     use crate::id::Id;
+    use std::io::Write;
 
     #[test]
     fn test_write() {
