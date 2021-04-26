@@ -47,4 +47,22 @@ A `FatBitMap` takes the last 2 blocks of a `SharedChunk`.
 
 ## Collision
 
-`File` and `TinyFile` are using
+`File` and `TinyFile` are using `32 Bytes` as ID.
+With this formula:
+\\( 1 - e^{-\frac{N^2}{2^{b+1}}} \\), b represents the bits, N represents the file count.
+
+From this formula, the collision probability is:
+
+|        N        |        Probability      |
+| :-------------: | :---------------------: |
+| \\( 10^{31} \\) | \\( 4.44 * 10^{-16} \\) |
+| \\( 10^{32} \\) | \\( 4.32 * 10^{-14} \\) |
+| \\( 10^{33} \\) | \\( 4.32 * 10^{-12} \\) |
+| \\( 10^{34} \\) | \\( 4.32 * 10^{-10} \\) |
+| \\( 10^{35} \\) | \\( 4.32 * 10^{-8}  \\) |
+| \\( 10^{36} \\) | \\( 4.32 * 10^{-6}  \\) |
+| \\( 10^{37} \\) | \\( 4.32 * 10^{-4}  \\) |
+| \\( 10^{38} \\) | \\(     0.04226     \\) |
+| \\( 10^{39} \\) | \\(     0.98667     \\) |
+
+It's safe to store \\( 10^{30} \\) files in an EOSS Filesystem.
